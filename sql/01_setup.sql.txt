@@ -1,0 +1,66 @@
+-- Project: Where does TheLook lose money? -- File: setup. Snapshot, data checks and base views.
+
+-- Snapshot of TheLook source tables, taken on 2026-11-11
+
+CREATE TABLE `thelook-portfolio-514213.analysis.raw_inventory_items` AS
+SELECT * FROM `bigquery-public-data.thelook_ecommerce.inventory_items`;
+
+CREATE TABLE `thelook-portfolio-514213.analysis.raw_order_items` AS
+SELECT * FROM `bigquery-public-data.thelook_ecommerce.order_items`;
+
+CREATE TABLE `thelook-portfolio-514213.analysis.raw_distribution_centers` AS
+SELECT * FROM `bigquery-public-data.thelook_ecommerce.distribution_centers`;
+
+
+-- 2. Data checks: latest dates in the snapshot
+-- Check 1: latest created_at in inventory_items
+
+SELECT MAX(created_at)
+FROM `thelook-portfolio-514213.analysis.raw_inventory_items`;
+-- Result: 2026-11-14. 
+
+-- Check 2: latest created_at in order_items
+
+SELECT MAX(created_at)
+FROM `thelook-portfolio-514213.analysis.raw_order_items`
+-- Result: 2026-11-14.
+
+
+-- 3. View: base_inventory 
+-- One row = one unit in stock.
+
+SELECT
+    ii.id,
+    ii.product_id,
+    ii.created_at,
+    ii.sold_at,
+    ii.sold_at IS NOT NULL AS is_sold,
+    DATE_DIFF(
+      IFNULL(CAST(ii.sold_at AS DATE), DATE '2026-11-14'),
+      CAST(ii.created_at AS DATE),
+      DAY
+    ) AS age_days,
+    ii.cost,
+    ii.product_retail_price,
+    ii.product_category,
+    ii.product_brand,
+    dc.name AS distribution_center
+FROM `thelook-portfolio-514213.analysis.raw_inventory_items` ii
+LEFT JOIN `thelook-portfolio-514213.analysis.raw_distribution_centers` dc ON ii.product_distribution_center_id=dc.id
+WHERE CAST(created_at AS DATE) <= DATE '2026-11-14'
+
+
+-- 4. View: base_order_items 
+— One row = one sold item.
+
+SELECT 
+    oi.id,
+    oi.status,
+    oi.sale_price,
+    bi.cost,
+    bi.product_category,
+    bi.distribution_center,
+    oi.created_at
+FROM `thelook-portfolio-514213.analysis.raw_order_items` oi
+LEFT JOIN `thelook-portfolio-514213.analysis.base_inventory` bi
+ON oi.inventory_item_id = bi.id
